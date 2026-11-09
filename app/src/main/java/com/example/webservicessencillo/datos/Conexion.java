@@ -1,4 +1,8 @@
 package com.example.webservicessencillo.datos;
+
+import com.example.webservicessencillo.BuildConfig;
+
+// La URL ahora se configura en local.properties (api.url) y no queda fija en el código.
 public class Conexion {
-    public static final String URL_WEB_SERVICES = "http://192.168.1.157/iot_app/";
+    public static final String URL_WEB_SERVICES = BuildConfig.URL_WEB_SERVICES;
 }

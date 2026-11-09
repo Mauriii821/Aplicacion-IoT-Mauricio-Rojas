@@ -1,44 +1,134 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="30dp"
-        android:gravity="center">
+        android:padding="24dp">
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="MONITOREO EN TIEMPO REAL"
+            android:text="MONITOREO Y CONTROL IOT"
             android:textAlignment="center"
             android:textSize="20sp"
-            android:textStyle="bold"
-            android:layout_marginBottom="50dp"/>
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvConexion"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:padding="8dp"
+            android:text="Conectando..."
+            android:textAlignment="center"
+            android:textColor="#FFFFFF"
+            android:background="#757575" />
+
+        <TextView
+            android:id="@+id/tvDispositivo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Dispositivo: --"
+            android:textAlignment="center" />
+
+        <!-- SENSORES -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="SENSORES"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvTemp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:text="Temperatura: -- °C"
             android:textAlignment="center"
-            android:textSize="28sp"
             android:textColor="#D32F2F"
-            android:textStyle="bold"
-            android:layout_marginBottom="30dp"/>
+            android:textSize="26sp"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvHum"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:text="Humedad: -- %"
             android:textAlignment="center"
-            android:textSize="28sp"
             android:textColor="#1976D2"
+            android:textSize="26sp"
             android:textStyle="bold" />
 
+        <TextView
+            android:id="@+id/tvMovimiento"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Movimiento: --"
+            android:textAlignment="center"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvActualizado"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Última lectura: --"
+            android:textAlignment="center"
+            android:textSize="12sp" />
+
+        <!-- ACTUADORES -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="ACTUADORES"
+            android:textStyle="bold" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/swLed"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Luz / alarma (LED)"
+            android:textSize="18sp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/swVentilador"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Ventilador"
+            android:textSize="18sp" />
+
+        <!-- HISTORIAL -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="HISTORIAL (guardado en el teléfono)"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvHistorial"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:fontFamily="monospace"
+            android:text="Sin datos"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/btnSalir"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="CERRAR SESIÓN" />
     </LinearLayout>
-</androidx.constraintlayout.widget.ConstraintLayout>
+</ScrollView>
