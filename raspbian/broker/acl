@@ -1,0 +1,19 @@
+# ACL del broker: qué puede leer (read) y publicar (write) cada usuario.
+# Se instala en /etc/mosquitto/acl
+
+# Nodo IoT (sensores y actuadores de la VM)
+user raspbian01
+topic write     iot/raspbian01/telemetria
+topic readwrite iot/raspbian01/estado
+topic read      iot/raspbian01/comandos
+
+# Puente MQTT -> base de datos (solo lectura)
+user puente
+topic read iot/+/telemetria
+topic read iot/+/estado
+
+# App Android: lee datos y envía comandos
+user app_android
+topic read  iot/raspbian01/telemetria
+topic read  iot/raspbian01/estado
+topic write iot/raspbian01/comandos

@@ -17,7 +17,7 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField "String", "URL_WEB_SERVICES", secreto('api.url', 'http://192.168.1.157/iot_app/')
-        buildConfigField "String", "MQTT_URI", secreto('mqtt.uri', 'ssl://xxxxxxxx.s1.eu.hivemq.cloud:8883')
+        buildConfigField "String", "MQTT_URI", secreto('mqtt.uri', 'ssl://192.168.1.160:8883')
         buildConfigField "String", "MQTT_USER", secreto('mqtt.user', '')
         buildConfigField "String", "MQTT_PASS", secreto('mqtt.pass', '')
         buildConfigField "String", "HMAC_KEY", secreto('hmac.key', '')

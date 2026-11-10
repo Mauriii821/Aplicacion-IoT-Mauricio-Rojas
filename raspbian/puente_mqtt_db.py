@@ -125,8 +125,10 @@ def on_message(client, userdata, msg):
 
 def main():
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"puente-{os.getpid()}")
-    client.username_pw_set(os.environ["MQTT_USER"], os.environ["MQTT_PASS"])
-    client.tls_set(cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS_CLIENT)
+    # El puente usa su propio usuario MQTT (solo lectura según el ACL del broker)
+    client.username_pw_set(os.getenv("PUENTE_MQTT_USER", "puente"), os.environ["PUENTE_MQTT_PASS"])
+    client.tls_set(ca_certs=os.getenv("MQTT_CA") or None, cert_reqs=ssl.CERT_REQUIRED,
+                   tls_version=ssl.PROTOCOL_TLS_CLIENT)
     client.reconnect_delay_set(min_delay=1, max_delay=60)
     client.on_connect = on_connect
     client.on_message = on_message

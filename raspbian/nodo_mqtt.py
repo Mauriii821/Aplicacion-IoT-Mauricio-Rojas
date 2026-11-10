@@ -4,7 +4,7 @@ nodo_mqtt.py - "Microcontrolador virtual" en la VM Raspbian (reemplaza a sensor.
 Equivale a DEVICE1 (sensor de humedad/temperatura) y DEVICE2 (sensor de
 movimiento) del taller de Packet Tracer.
 
-- Publica lecturas por MQTT sobre TLS (puerto 8883) al broker.
+- Publica lecturas por MQTT sobre TLS (puerto 8883) al broker Mosquitto de la VM.
 - Recibe comandos de la app para los actuadores (led, ventilador).
 - Cada mensaje va firmado con HMAC-SHA256; los comandos sin firma válida,
   antiguos (>30 s) o con valores no permitidos se descartan.
@@ -125,7 +125,9 @@ def leer_sensores():
 def main():
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"{DISPOSITIVO}-{os.getpid()}")
     client.username_pw_set(os.environ["MQTT_USER"], os.environ["MQTT_PASS"])
-    client.tls_set(cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS_CLIENT)
+    # TLS validando el certificado del broker Mosquitto con nuestra propia CA
+    client.tls_set(ca_certs=os.getenv("MQTT_CA") or None, cert_reqs=ssl.CERT_REQUIRED,
+                   tls_version=ssl.PROTOCOL_TLS_CLIENT)
     client.reconnect_delay_set(min_delay=1, max_delay=60)
     # Last Will (firmado): el broker lo publica si el nodo se cae sin avisar
     client.will_set(T_ESTADO, empaquetar(CLAVE_HMAC, {"dispositivo": DISPOSITIVO, "online": False, **actuadores}),

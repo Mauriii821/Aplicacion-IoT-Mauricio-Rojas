@@ -21,11 +21,17 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
 import java.util.Iterator;
 import java.util.UUID;
 
+import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManagerFactory;
 
 /**
  * Comunicación inalámbrica App <-> dispositivo IoT por MQTT sobre TLS.
@@ -53,12 +59,15 @@ public class MqttManager {
     private final CacheLocal cache;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final Listener listener;
+    private final Context contexto;
 
     private MqttAsyncClient cliente;
+    private SSLSocketFactory socketFactory;
     private boolean activo = false;
     private int intentos = 0;
 
     public MqttManager(Context ctx, Listener listener) {
+        this.contexto = ctx.getApplicationContext();
         this.listener = listener;
         this.cache = new CacheLocal(ctx);
         String id = BuildConfig.DEVICE_ID;
@@ -85,8 +94,8 @@ public class MqttManager {
             MqttConnectOptions opciones = new MqttConnectOptions();
             opciones.setUserName(BuildConfig.MQTT_USER);
             opciones.setPassword(BuildConfig.MQTT_PASS.toCharArray());
-            opciones.setSocketFactory(SSLSocketFactory.getDefault()); // TLS
-            opciones.setHttpsHostnameVerificationEnabled(true);       // valida el certificado del broker
+            opciones.setSocketFactory(socketFactoryTls());       // TLS con la CA del broker
+            opciones.setHttpsHostnameVerificationEnabled(true);  // el certificado debe ser de esa IP
             opciones.setAutomaticReconnect(true);
             opciones.setCleanSession(true);
             opciones.setConnectionTimeout(10);
@@ -106,6 +115,32 @@ public class MqttManager {
             Log.w(TAG, "Error al conectar", e);
             programarReintento();
         }
+    }
+
+    /**
+     * El broker Mosquitto de la VM usa un certificado firmado por nuestra propia CA
+     * (creada con raspbian/broker/instalar_broker.sh). La app solo confía en esa CA,
+     * así que no se puede conectar a un broker falso que intercepte el tráfico.
+     * El archivo va en app/src/main/assets/ca_mosquitto.crt
+     */
+    private SSLSocketFactory socketFactoryTls() {
+        if (socketFactory != null) return socketFactory;
+        try (InputStream in = contexto.getAssets().open("ca_mosquitto.crt")) {
+            Certificate ca = CertificateFactory.getInstance("X.509").generateCertificate(in);
+            KeyStore almacen = KeyStore.getInstance(KeyStore.getDefaultType());
+            almacen.load(null, null);
+            almacen.setCertificateEntry("ca_mosquitto", ca);
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(almacen);
+            SSLContext ssl = SSLContext.getInstance("TLSv1.2");
+            ssl.init(null, tmf.getTrustManagers(), null);
+            socketFactory = ssl.getSocketFactory();
+        } catch (Exception e) {
+            // Sin el archivo se usan las CA del sistema (sirve para un broker con certificado público)
+            Log.w(TAG, "No se encontró assets/ca_mosquitto.crt, usando CA del sistema", e);
+            socketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+        }
+        return socketFactory;
     }
 
     /** Llamar en onStop(): con la app en segundo plano no se gasta batería. */
