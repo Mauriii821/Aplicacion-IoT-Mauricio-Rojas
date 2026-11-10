@@ -11,9 +11,14 @@ CERTS=/etc/mosquitto/certs
 
 if [ "$(id -u)" -ne 0 ]; then echo "Ejecuta con sudo"; exit 1; fi
 
+echo "==> Actualizando lista de paquetes..."
+apt-get update || echo "AVISO: apt-get update tuvo errores (revisa la fecha/hora de la VM y el internet)"
+
 echo "==> Instalando Mosquitto..."
-apt-get update -qq
-apt-get install -y -qq mosquitto mosquitto-clients openssl
+# openssl ya viene instalado en Raspbian; solo se instala si falta
+PAQUETES="mosquitto mosquitto-clients"
+command -v openssl >/dev/null 2>&1 || PAQUETES="$PAQUETES openssl"
+apt-get install -y --no-upgrade $PAQUETES || apt-get install -y --fix-missing --no-upgrade $PAQUETES
 
 echo "==> Creando certificados TLS (CA propia + certificado del broker para $IP)..."
 mkdir -p "$CERTS"
