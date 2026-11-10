@@ -62,23 +62,20 @@ mkdir -p ~/.aws && nano ~/.aws/credentials
 printf "[default]\nregion = us-east-1\n" > ~/.aws/config      # solo la primera vez
 ```
 
-### 2. Objeto (thing) en AWS IoT Core
-Si ya tienes la carpeta `~/aws-iot-certs` del taller, úsala. Si no: consola de **AWS IoT** → *Conectar un dispositivo* → descarga el kit y súbelo a la Raspberry.
-
-En **AWS IoT → Seguridad → Políticas**, abre la política de tu certificado → *Editar versión activa* → pega `raspbian/aws/politica_iot_core.json` → guarda como nueva versión activa.
-
-### 3. Programas de la Raspberry (la primera vez)
+### 2. Configurar AWS desde cero (un solo comando)
 ```bash
 cd ~/Aplicacion-IoT-Mauricio-Rojas/raspbian
+sudo apt-get install -y python3-venv
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.ejemplo .env
-python3 -c "import secrets; print(secrets.token_hex(32))"   # clave HMAC
-python3 crear_tablas.py          # tablas en DynamoDB
-python3 crear_reglas_iot.py      # reglas IoT Core -> DynamoDB; muestra el IOT_ENDPOINT
-python3 crear_usuario.py         # usuario para entrar a la app
-./crear_certs_api.sh 172.20.10.2 # certificado HTTPS de la API (la IP de tu Raspberry)
-nano .env                        # IOT_ENDPOINT, rutas de los certificados y HMAC_KEY
+python3 configurar_aws.py
+```
+`configurar_aws.py` crea las tablas de DynamoDB, el objeto `raspbian01` en IoT Core, su certificado y llave privada (en `~/aws-iot-certs`), descarga `AmazonRootCA1.pem`, crea y asocia la política de mínimo privilegio (`aws/politica_iot_core.json` es la versión de referencia), crea las reglas IoT Core → DynamoDB y completa el `.env` (endpoint, rutas y clave HMAC). Se puede ejecutar varias veces sin duplicar nada.
+
+### 3. Usuario de la app y certificado HTTPS
+```bash
+python3 crear_usuario.py
+./crear_certs_api.sh 172.20.10.2      # la IP de tu Raspberry
 ```
 
 ### 4. Ejecutar (2 terminales, cada una con `cd raspbian && source venv/bin/activate`)

@@ -1,6 +1,6 @@
 """
-crear_tablas.py - Crea las 3 tablas de DynamoDB del proyecto (ejecutar una sola vez).
-Uso:  python3 crear_tablas.py
+crear_tablas.py - Crea las 3 tablas de DynamoDB del proyecto.
+Normalmente lo ejecuta configurar_aws.py. Uso directo:  python3 crear_tablas.py
 """
 from botocore.exceptions import ClientError
 
@@ -12,20 +12,25 @@ TABLAS = [
     (T_USUARIOS, [("usuario", "S", "HASH")]),
 ]
 
-db = recurso()
-for nombre, claves in TABLAS:
-    try:
-        t = db.create_table(
-            TableName=nombre,
-            KeySchema=[{"AttributeName": n, "KeyType": k} for n, _, k in claves],
-            AttributeDefinitions=[{"AttributeName": n, "AttributeType": t} for n, t, _ in claves],
-            BillingMode="PAY_PER_REQUEST",  # bajo demanda: sin costo fijo
-        )
-        t.wait_until_exists()
-        print(f"[OK] tabla {nombre} creada")
-    except ClientError as e:
-        if e.response["Error"]["Code"] == "ResourceInUseException":
-            print(f"[--] tabla {nombre} ya existía")
-        else:
-            raise
-print("Listo. Ahora crea un usuario con: python3 crear_usuario.py")
+
+def main():
+    db = recurso()
+    for nombre, claves in TABLAS:
+        try:
+            t = db.create_table(
+                TableName=nombre,
+                KeySchema=[{"AttributeName": n, "KeyType": k} for n, _, k in claves],
+                AttributeDefinitions=[{"AttributeName": n, "AttributeType": t} for n, t, _ in claves],
+                BillingMode="PAY_PER_REQUEST",  # bajo demanda: sin costo fijo
+            )
+            t.wait_until_exists()
+            print(f"[OK] tabla {nombre} creada")
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ResourceInUseException":
+                print(f"[--] tabla {nombre} ya existía")
+            else:
+                raise
+
+
+if __name__ == "__main__":
+    main()
