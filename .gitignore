@@ -1,0 +1,14 @@
+# Credenciales: NUNCA subir a GitHub
+local.properties
+raspbian/.env
+php/config.php
+*.pem
+# Archivos generados
+raspbian/buffer_*.db
+__pycache__/
+.gradle/
+build/
+app/build/
+.idea/caches/
+.idea/workspace.xml
+*.apk
