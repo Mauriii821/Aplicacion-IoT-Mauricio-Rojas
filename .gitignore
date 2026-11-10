@@ -2,6 +2,9 @@
 local.properties
 raspbian/.env
 *.pem
+*.pem.key
+*.pem.crt
+aws-iot-certs/
 # Archivos generados
 raspbian/buffer_*.db
 __pycache__/

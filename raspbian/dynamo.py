@@ -1,5 +1,9 @@
 """
-dynamo.py - Acceso a Amazon DynamoDB (base de datos NoSQL / no estructurada)
+dynamo.py - Acceso a AWS: DynamoDB (base de datos NoSQL / no estructurada)
+y publicación de comandos en AWS IoT Core.
+
+Las lecturas llegan a DynamoDB solas, mediante las reglas de IoT Core
+(crear_reglas_iot.py). Este módulo las LEE para la app.
 
 Tablas (modo bajo demanda, se crean con crear_tablas.py):
   iot_lecturas  clave: dispositivo (texto) + ts (número)  -> historial de sensores
@@ -38,11 +42,6 @@ def tabla(nombre):
     return recurso().Table(nombre)
 
 
-def a_decimal(valor):
-    """DynamoDB no acepta float: se guarda como Decimal."""
-    return Decimal(str(round(float(valor), 2)))
-
-
 def a_json(item):
     """Convierte Decimal de DynamoDB a tipos normales para responder JSON."""
     salida = {}
@@ -54,24 +53,16 @@ def a_json(item):
     return salida
 
 
-def guardar_lectura(datos):
-    tabla(T_LECTURAS).put_item(Item={
-        "dispositivo": str(datos["dispositivo"]),
-        "ts": int(datos["ts"]),
-        "temperatura": a_decimal(datos["temperatura"]),
-        "humedad": a_decimal(datos["humedad"]),
-        "movimiento": bool(datos.get("movimiento", False)),
-    })
+_iot_data = None
 
 
-def guardar_estado(datos):
-    tabla(T_ESTADO).put_item(Item={
-        "dispositivo": str(datos.get("dispositivo", "raspbian01")),
-        "led": bool(datos.get("led", False)),
-        "ventilador": bool(datos.get("ventilador", False)),
-        "online": bool(datos.get("online", False)),
-        "ts": int(datos.get("ts", 0)),
-    })
+def publicar_iot(topico, mensaje):
+    """Publica un mensaje MQTT en AWS IoT Core (por HTTPS, con las credenciales de AWS)."""
+    global _iot_data
+    if _iot_data is None:
+        endpoint = os.environ["IOT_ENDPOINT"]
+        _iot_data = boto3.client("iot-data", region_name=REGION, endpoint_url=f"https://{endpoint}")
+    _iot_data.publish(topic=topico, qos=1, payload=mensaje.encode("utf-8"))
 
 
 def ultimas_lecturas(dispositivo, cantidad=20):

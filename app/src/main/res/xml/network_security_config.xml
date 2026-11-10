@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- TODO el tráfico de la app va cifrado: no se permite HTTP sin cifrar.
-     Para la API de la VM se confía en nuestra propia CA (res/raw/ca_mosquitto.crt),
-     la misma que firma el certificado del broker Mosquitto.
-     Si cambia la IP de la VM, cámbiala también aquí. -->
+     Se confía en las CA del sistema y en nuestra propia CA (res/raw/ca_api.crt),
+     que firma el certificado HTTPS de la API de la Raspberry.
+     Como no depende de la IP, sirve en la VM y en la Raspberry física. -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false" />
-    <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="false">172.20.10.2</domain>
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
-            <certificates src="@raw/ca_mosquitto" />
+            <certificates src="system" />
+            <certificates src="@raw/ca_api" />
         </trust-anchors>
-    </domain-config>
+    </base-config>
 </network-security-config>

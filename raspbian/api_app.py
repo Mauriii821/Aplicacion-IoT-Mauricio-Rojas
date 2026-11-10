@@ -1,21 +1,26 @@
 """
-api_app.py - API HTTPS para la app Android (reemplaza a los archivos PHP)
-=======================================================================
-La app "rescata" los datos guardados en DynamoDB a través de esta API.
+api_app.py - API HTTPS para la app Android
+==========================================
+La app "rescata" los mensajes guardados en DynamoDB y envía comandos a
+los actuadores a través de esta API (que los publica en AWS IoT Core).
 
-  POST /login   usuario, password  -> {"status": "Exito", "token": "..."}
-  GET  /datos?dispositivo=raspbian01  (cabecera Authorization: Bearer <token>)
-       -> última lectura, historial (20) y estado de los actuadores
+  POST /login    usuario, password  -> {"status": "Exito", "token": "..."}
+  GET  /datos?dispositivo=raspbian01   -> última lectura, historial y actuadores
+  POST /comando  actuador, valor       -> publica el comando firmado en IoT Core
+  (/datos y /comando exigen la cabecera  Authorization: Bearer <token>)
 
 Seguridad (ISO 27000):
 - HTTPS con el mismo certificado del broker (firmado por nuestra CA).
 - Contraseñas guardadas con hash PBKDF2 y comparadas en tiempo constante.
 - Token de sesión aleatorio que vence en 12 horas; /datos lo exige.
 - Bloqueo de 60 s tras 5 intentos fallidos desde la misma IP (fuerza bruta).
+- Cada lectura de DynamoDB se verifica con su firma HMAC ("verificado").
+- Solo se aceptan comandos para actuadores conocidos y valores booleanos.
 - Validación de entradas y errores sin detalles internos.
 
 Uso:  python3 api_app.py
 """
+import json
 import os
 import re
 import secrets
@@ -27,8 +32,13 @@ from flask import Flask, jsonify, request
 from werkzeug.security import check_password_hash
 
 import dynamo
+from seguridad import empaquetar, verificar_plano
 
 load_dotenv()
+
+CLAVE_HMAC = os.environ["HMAC_KEY"].encode()
+ACTUADORES = {"led", "ventilador"}
+CAMPOS_LECTURA = ("dispositivo", "ts", "temperatura", "humedad", "movimiento")
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 4 * 1024  # peticiones pequeñas
@@ -104,6 +114,7 @@ def datos():
     except (BotoCoreError, ClientError):
         return jsonify(error="Servicio no disponible"), 503
 
+    historial = [limpiar(item) for item in historial]
     ultima = historial[0] if historial else {}
     return jsonify(
         temperatura=ultima.get("temperatura", 0),
@@ -117,6 +128,43 @@ def datos():
             "online": bool(est.get("online", False)),
         },
     )
+
+
+def limpiar(item):
+    """
+    Devuelve la lectura con los valores ORIGINALES firmados por el dispositivo
+    e indica si el registro de DynamoDB está íntegro ("verificado").
+    Si alguien modifica una columna en la base de datos, la firma no calza.
+    """
+    columnas = {k: item[k] for k in CAMPOS_LECTURA if k in item}
+    if not verificar_plano(CLAVE_HMAC, item):
+        print(f"[SEGURIDAD] registro sin firma válida en DynamoDB: ts={item.get('ts')}")
+        return {**columnas, "verificado": False}
+    firmado = json.loads(item["data"])
+    original = {k: firmado[k] for k in CAMPOS_LECTURA if k in firmado}
+    integro = all(columnas.get(k) == v for k, v in original.items())
+    if not integro:
+        print(f"[SEGURIDAD] registro alterado en DynamoDB: ts={item.get('ts')}")
+    return {**original, "verificado": integro}
+
+
+@app.post("/comando")
+def comando():
+    usuario = usuario_autenticado()
+    if not usuario:
+        return jsonify(error="No autorizado"), 401
+    actuador = request.form.get("actuador", "")
+    valor = request.form.get("valor", "")
+    dispositivo = request.form.get("dispositivo", "raspbian01")
+    if actuador not in ACTUADORES or valor not in ("true", "false") or not PATRON_DISPOSITIVO.match(dispositivo):
+        return jsonify(error="Comando inválido"), 400
+    mensaje = empaquetar(CLAVE_HMAC, {"actuador": actuador, "valor": valor == "true"})
+    try:
+        dynamo.publicar_iot(f"iot/{dispositivo}/comandos", mensaje)
+    except (BotoCoreError, ClientError):
+        return jsonify(error="Servicio no disponible"), 503
+    print(f"[COMANDO] {usuario}: {actuador} -> {valor}")
+    return jsonify(status="Enviado")
 
 
 if __name__ == "__main__":

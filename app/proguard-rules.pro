@@ -19,7 +19,3 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
-
-# Eclipse Paho MQTT
--keep class org.eclipse.paho.client.mqttv3.** { *; }
--dontwarn org.eclipse.paho.client.mqttv3.**

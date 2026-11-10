@@ -1,11 +1,14 @@
 """
-nodo_mqtt.py - "Microcontrolador virtual" en la VM Raspbian (reemplaza a sensor.py)
-==================================================================================
+nodo_mqtt.py - Dispositivo IoT en la Raspberry Pi (física o VM Raspbian)
+=======================================================================
 Equivale a DEVICE1 (sensor de humedad/temperatura) y DEVICE2 (sensor de
 movimiento) del taller de Packet Tracer.
 
-- Publica lecturas por MQTT sobre TLS (puerto 8883) al broker Mosquitto de la VM.
-- Recibe comandos de la app para los actuadores (led, ventilador).
+- Publica lecturas por MQTT a AWS IoT Core (broker en la nube), con TLS
+  mutuo: certificado del dispositivo + llave privada + CA raíz de Amazon
+  (el kit de conexión que se descarga desde la consola de AWS IoT).
+- Una regla de AWS IoT Core guarda cada mensaje en DynamoDB.
+- Recibe comandos para los actuadores (led, ventilador).
 - Cada mensaje va firmado con HMAC-SHA256; los comandos sin firma válida,
   antiguos (>30 s) o con valores no permitidos se descartan.
 - Sin conexión: guarda las lecturas en SQLite y las reenvía al reconectar.
@@ -25,14 +28,15 @@ import time
 import paho.mqtt.client as mqtt
 from dotenv import load_dotenv
 
-from seguridad import desempaquetar, empaquetar
+from seguridad import desempaquetar, firmar_plano
 
 load_dotenv()
 
-BROKER = os.environ["MQTT_HOST"]
+BROKER = os.environ["IOT_ENDPOINT"]     # ej: xxxxxxxx-ats.iot.us-east-1.amazonaws.com
 PUERTO = int(os.getenv("MQTT_PORT", "8883"))
 CLAVE_HMAC = os.environ["HMAC_KEY"].encode()
 DISPOSITIVO = os.getenv("DEVICE_ID", "raspbian01")
+CLIENT_ID = os.getenv("IOT_CLIENT_ID", DISPOSITIVO)  # debe coincidir con la política de IoT
 INTERVALO_S = int(os.getenv("INTERVALO_S", "5"))
 UMBRAL = 0.5          # cambio mínimo para volver a publicar
 LATIDO_CICLOS = 6     # publica igual cada 6 ciclos
@@ -76,15 +80,15 @@ conectado = False
 
 
 def publicar_estado(client):
-    msg = empaquetar(CLAVE_HMAC, {"dispositivo": DISPOSITIVO, "online": True, **actuadores})
-    client.publish(T_ESTADO, msg, qos=1, retain=True)
+    msg = firmar_plano(CLAVE_HMAC, {"dispositivo": DISPOSITIVO, "online": True, **actuadores})
+    client.publish(T_ESTADO, msg, qos=1)
 
 
 def on_connect(client, userdata, flags, reason_code, properties):
     global conectado
     if reason_code == 0:
         conectado = True
-        print("[MQTT] conectado al broker con TLS")
+        print("[MQTT] conectado a AWS IoT Core (TLS mutuo con certificados)")
         client.subscribe(T_COMANDOS, qos=1)
         publicar_estado(client)
         reenviar_pendientes(client)
@@ -123,15 +127,16 @@ def leer_sensores():
 
 
 def main():
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"{DISPOSITIVO}-{os.getpid()}")
-    client.username_pw_set(os.environ["MQTT_USER"], os.environ["MQTT_PASS"])
-    # TLS validando el certificado del broker Mosquitto con nuestra propia CA
-    client.tls_set(ca_certs=os.getenv("MQTT_CA") or None, cert_reqs=ssl.CERT_REQUIRED,
-                   tls_version=ssl.PROTOCOL_TLS_CLIENT)
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=CLIENT_ID)
+    # TLS mutuo: AWS IoT Core valida nuestro certificado y nosotros el de Amazon
+    client.tls_set(ca_certs=os.environ["IOT_ROOT_CA"],     # AmazonRootCA1.pem
+                   certfile=os.environ["IOT_CERT"],        # xxxx-certificate.pem.crt
+                   keyfile=os.environ["IOT_KEY"],          # xxxx-private.pem.key
+                   cert_reqs=ssl.CERT_REQUIRED, tls_version=ssl.PROTOCOL_TLS_CLIENT)
     client.reconnect_delay_set(min_delay=1, max_delay=60)
     # Last Will (firmado): el broker lo publica si el nodo se cae sin avisar
-    client.will_set(T_ESTADO, empaquetar(CLAVE_HMAC, {"dispositivo": DISPOSITIVO, "online": False, **actuadores}),
-                    qos=1, retain=True)
+    client.will_set(T_ESTADO, firmar_plano(CLAVE_HMAC, {"dispositivo": DISPOSITIVO, "online": False, **actuadores}),
+                    qos=1)
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect
     client.on_message = on_message
@@ -148,7 +153,7 @@ def main():
                       or abs(lectura["temperatura"] - ultima["temperatura"]) > UMBRAL
                       or abs(lectura["humedad"] - ultima["humedad"]) > UMBRAL)
             if cambio or ciclo % LATIDO_CICLOS == 0:
-                msg = empaquetar(CLAVE_HMAC, {"dispositivo": DISPOSITIVO, **lectura})
+                msg = firmar_plano(CLAVE_HMAC, {"dispositivo": DISPOSITIVO, **lectura})
                 if conectado and client.publish(T_TELEMETRIA, msg, qos=1).rc == mqtt.MQTT_ERR_SUCCESS:
                     print(f"[TX] {lectura}")
                 else:

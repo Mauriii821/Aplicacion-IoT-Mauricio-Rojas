@@ -17,10 +17,6 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField "String", "URL_WEB_SERVICES", secreto('api.url', 'https://172.20.10.2:5000/')
-        buildConfigField "String", "MQTT_URI", secreto('mqtt.uri', 'ssl://172.20.10.2:8883')
-        buildConfigField "String", "MQTT_USER", secreto('mqtt.user', '')
-        buildConfigField "String", "MQTT_PASS", secreto('mqtt.pass', '')
-        buildConfigField "String", "HMAC_KEY", secreto('hmac.key', '')
         buildConfigField "String", "DEVICE_ID", secreto('device.id', 'raspbian01')
     }
     buildFeatures {
@@ -46,8 +42,6 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'com.google.android.material:material:1.10.0'
     implementation 'com.android.volley:volley:1.2.1'
-    // Cliente MQTT (Eclipse Paho) para comunicarse con el broker por TLS
-    implementation 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5'
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'

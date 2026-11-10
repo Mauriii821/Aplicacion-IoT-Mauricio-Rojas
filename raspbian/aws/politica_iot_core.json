@@ -1,0 +1,31 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ConectarSoloComoEsteDispositivo",
+      "Effect": "Allow",
+      "Action": "iot:Connect",
+      "Resource": "arn:aws:iot:us-east-1:*:client/raspbian01"
+    },
+    {
+      "Sid": "PublicarSoloSusDatos",
+      "Effect": "Allow",
+      "Action": "iot:Publish",
+      "Resource": [
+        "arn:aws:iot:us-east-1:*:topic/iot/raspbian01/telemetria",
+        "arn:aws:iot:us-east-1:*:topic/iot/raspbian01/estado"
+      ]
+    },
+    {
+      "Sid": "RecibirSoloSusComandos",
+      "Effect": "Allow",
+      "Action": "iot:Subscribe",
+      "Resource": "arn:aws:iot:us-east-1:*:topicfilter/iot/raspbian01/comandos"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iot:Receive",
+      "Resource": "arn:aws:iot:us-east-1:*:topic/iot/raspbian01/comandos"
+    }
+  ]
+}

@@ -1,115 +1,113 @@
 # Aplicación IoT – Mauricio Rojas (TI3042, Unidad 3)
 
-Prototipo IoT con una app Android que **monitorea sensores y controla actuadores** de forma inalámbrica y segura.
-Sigue el flujo de la guía: **sensor → MQTT → broker → base de datos no estructurada (Amazon DynamoDB) → la app rescata los datos**.
+Prototipo IoT con una app Android que **monitorea sensores y controla actuadores** de forma inalámbrica y segura, siguiendo el flujo de la guía:
+
+**SENSOR RECIBE LECTURAS → ENVÍA MENSAJES POR MQTT → RECIBE BROKER PÚBLICO (AWS IoT Core) → GUARDA EN DB NO ESTRUCTURADA (DynamoDB) → RESCATA MENSAJES LA APP**
 
 ## Arquitectura
 
 ```
-                         VM Raspbian (172.20.10.2)
- ┌──────────────────────────────────────────────────────────────────────┐
- │  nodo_mqtt.py ──MQTT TLS──► Mosquitto ──MQTT TLS──► puente_mqtt_dynamo.py ──HTTPS──► Amazon DynamoDB
- │  (sensores y      ◄─comandos─  (broker   │                                                  │
- │   actuadores)                  :8883)    │                                                  │
- │                                          │          api_app.py (HTTPS :5000) ◄──────────────┘
- └──────────────────────────────────────────┼──────────────────┼───────────────────────────────┘
-                                   MQTT TLS │ tiempo real      │ HTTPS: login + historial
-                                            ▼                  ▼
-                                         App Android (Java)
+ Raspberry Pi (física o VM Raspbian)                         AWS (Learner Lab)
+ ┌──────────────────────────────┐   MQTT + TLS mutuo   ┌───────────────────┐  regla IoT  ┌──────────────┐
+ │ nodo_mqtt.py                 │──── telemetría ─────►│                   │────────────►│   DynamoDB   │
+ │  sensores: temp, humedad,    │──── estado ─────────►│   AWS IoT Core    │────────────►│ iot_lecturas │
+ │            movimiento        │◄─── comandos ────────│  (broker público) │             │ iot_estado   │
+ │  actuadores: LED, ventilador │  (certificados X.509)│                   │             │ iot_usuarios │
+ │                              │                      └─────────▲─────────┘             └──────┬───────┘
+ │ api_app.py (HTTPS :5000) ────┼──── publica comandos ──────────┘                              │
+ │        ▲            ◄────────┼──── lee mensajes guardados ─────────────────────────────────────┘
+ └────────┼─────────────────────┘
+          │ HTTPS (login con token, datos, comandos)
+     App Android (Java)
 ```
 
-| Componente | Equivalente en Packet Tracer |
+| Componente | En el taller / Packet Tracer |
 |---|---|
-| `nodo_mqtt.py` | SBC-PT DEVICE1 (humedad/temperatura) y DEVICE2 (movimiento) |
-| Mosquitto en la VM | SBC-PT BROKER |
-| DynamoDB | Base de datos no estructurada (AWS DYNAMO DB del diagrama) |
-| App Android | TEST1 / TEST2 |
+| `nodo_mqtt.py` | SBC-PT DEVICE1 (humedad) y DEVICE2 (movimiento) |
+| AWS IoT Core | Broker público que recibe y lee los mensajes MQTT (cliente de prueba MQTT en la consola) |
+| DynamoDB | Base de datos no estructurada que guarda los mensajes MQTT |
+| App Android | TEST1 / TEST2 (emuladores o celulares) |
 
-Tópicos MQTT: `iot/raspbian01/telemetria`, `iot/raspbian01/comandos`, `iot/raspbian01/estado`.
+Tópicos MQTT: `iot/raspbian01/telemetria`, `iot/raspbian01/estado`, `iot/raspbian01/comandos`.
 
 ## Cómo cumple la guía de la Unidad 3
 
 | Requisito | Implementación |
 |---|---|
-| App envía instrucciones al microcontrolador | Switches LED/ventilador → `MqttManager.enviarComando()` → `nodo_mqtt.py` |
-| App recibe datos de sensores | Telemetría MQTT en tiempo real (`DashboardActivity.onLectura`) |
-| Reconexión automática | Paho `setAutomaticReconnect` + reintentos 2-4-8…60 s en la app; `reconnect_delay_set` en Python |
-| Consumo de energía | App: desconecta MQTT y HTTPS en `onStop`, keep-alive 60 s. Nodo: intervalo configurable y solo publica si los valores cambian |
+| App envía instrucciones al microcontrolador | Switches LED/ventilador → API → AWS IoT Core → `nodo_mqtt.py` |
+| App recibe datos de sensores | La app rescata de DynamoDB (vía API) las lecturas que la regla de IoT Core guardó |
+| Reconexión automática | Nodo: reconexión MQTT 1…60 s. App: reintentos 3, 6, 12… hasta 30 s |
+| Consumo de energía | Nodo: intervalo configurable y solo publica si los valores cambian. App: solo consulta con la pantalla visible |
 | Compatibilidad Android | minSdk 28 (Android 9) a targetSdk 36; probar en 2 emuladores con distinta API |
-| Plan de contingencia | Si falla MQTT → la app consulta DynamoDB vía API cada 15 s → si falla todo, datos guardados en el teléfono. Last Will avisa si el nodo se cae |
-| Almacenamiento temporal y sincronización | App: `CacheLocal`. Nodo: SQLite `buffer_offline.db`. Puente: SQLite `buffer_dynamo.db` si AWS no responde; se sincroniza solo |
-| Sensor → MQTT → broker → **BD no estructurada** → app | `nodo_mqtt.py` → Mosquitto → `puente_mqtt_dynamo.py` → **DynamoDB** → `api_app.py` → app |
-| Encriptación (ISO 27000) | MQTT con TLS 1.2 (solo puerto 8883), API por HTTPS, DynamoDB por HTTPS; la app solo confía en nuestra CA y bloquea todo tráfico sin cifrar |
-| Integridad de datos | Firma HMAC-SHA256 en cada mensaje MQTT + comandos con más de 30 s se rechazan (anti-repetición) |
-| Control de acceso | Broker sin anónimos + ACL por usuario; API con login y token que vence en 12 h; IAM con permisos solo sobre las 3 tablas |
-| Protección de datos | Contraseñas con hash PBKDF2 (600.000 iteraciones), bloqueo por intentos fallidos, credenciales fuera del código (`.env`, `~/.aws/credentials`, `local.properties`), `allowBackup=false` |
+| Plan de contingencia | Last Will: si la Raspberry se cae, IoT Core publica `online: false`. App sin red: muestra datos guardados y deja los comandos en cola |
+| Almacenamiento temporal y sincronización | Nodo: SQLite `buffer_offline.db`; al volver la conexión reenvía todo a IoT Core → DynamoDB. App: `CacheLocal` |
+| Encriptación (ISO 27000) | MQTT con TLS mutuo (certificados X.509 de AWS IoT), API por HTTPS con CA propia, DynamoDB por HTTPS; la app bloquea todo tráfico sin cifrar |
+| Integridad de datos | Cada mensaje firmado con HMAC-SHA256; la API marca como `verificado: false` cualquier registro alterado en DynamoDB; comandos con más de 30 s se rechazan |
+| Control de acceso | Política de IoT: el certificado solo puede conectarse como `raspbian01` y usar sus 3 tópicos. API con login y token de 12 h |
+| Protección de datos | Contraseñas con hash PBKDF2, bloqueo tras 5 intentos fallidos, credenciales fuera del código (`.env`, `~/.aws/credentials`, `local.properties`) |
 
 ## Puesta en marcha
 
-### 1. Broker MQTT (Mosquitto en la VM Raspbian)
-La red de la VM debe estar en modo **adaptador puente** (bridge). Mira su IP con `hostname -I`.
+### 0. Conexión a la Raspberry
 ```bash
-cd raspbian/broker
-sudo ./instalar_broker.sh 172.20.10.2      # <- la IP de tu VM
+ping 172.20.10.2               # prueba de conectividad
+ssh -l pi 172.20.10.2          # conexión remota segura
 ```
-Instala Mosquitto, crea la CA y el certificado TLS para esa IP, configura la ACL, pide la contraseña de los usuarios `raspbian01`, `puente` y `app_android` y copia el certificado para la API.
-Deja `~/ca_mosquitto.crt`: cópialo (FileZilla) a **`app/src/main/res/raw/ca_mosquitto.crt`** en Android Studio.
+Archivos: FileZilla con `sftp://IP`, usuario `pi`, puerto 22.
 
-> Si ya lo habías ejecutado antes, solo corre `sudo ./preparar_certs_api.sh`.
-
-### 2. Amazon DynamoDB
-**Credenciales en la VM** (nunca en el código):
+### 1. Credenciales del Learner Lab (cada vez que inicies el lab)
+*Start Lab* → *AWS Details* → *AWS CLI: Show* → copia el bloque en la Raspberry:
 ```bash
-sudo apt-get install -y awscli
-aws configure            # Access key, Secret key, región us-east-1
+mkdir -p ~/.aws && nano ~/.aws/credentials
+printf "[default]\nregion = us-east-1\n" > ~/.aws/config      # solo la primera vez
 ```
-- **Cuenta AWS personal:** IAM → Usuarios → Crear usuario `iot-raspbian` → *Adjuntar políticas directamente* → *Crear política* → pega `raspbian/aws/politica_iam.json`. Luego *Credenciales de seguridad → Crear clave de acceso*.
-- **AWS Academy (Learner Lab):** inicia el lab → *AWS Details* → *AWS CLI: Show* → copia todo en `~/.aws/credentials`. Estas credenciales vencen al terminar la sesión del lab: cópialas de nuevo cada vez.
 
-### 3. Programas de la VM
+### 2. Objeto (thing) en AWS IoT Core
+Si ya tienes la carpeta `~/aws-iot-certs` del taller, úsala. Si no: consola de **AWS IoT** → *Conectar un dispositivo* → descarga el kit y súbelo a la Raspberry.
+
+En **AWS IoT → Seguridad → Políticas**, abre la política de tu certificado → *Editar versión activa* → pega `raspbian/aws/politica_iot_core.json` → guarda como nueva versión activa.
+
+### 3. Programas de la Raspberry (la primera vez)
 ```bash
-cd raspbian
-sudo apt-get install -y python3-venv
+cd ~/Aplicacion-IoT-Mauricio-Rojas/raspbian
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.ejemplo .env && nano .env      # contraseñas MQTT y clave HMAC
+cp .env.ejemplo .env
 python3 -c "import secrets; print(secrets.token_hex(32))"   # clave HMAC
-python3 crear_tablas.py                # una sola vez
-python3 crear_usuario.py               # usuario para entrar a la app
+python3 crear_tablas.py          # tablas en DynamoDB
+python3 crear_reglas_iot.py      # reglas IoT Core -> DynamoDB; muestra el IOT_ENDPOINT
+python3 crear_usuario.py         # usuario para entrar a la app
+./crear_certs_api.sh 172.20.10.2 # certificado HTTPS de la API (la IP de tu Raspberry)
+nano .env                        # IOT_ENDPOINT, rutas de los certificados y HMAC_KEY
 ```
-Luego, en 3 terminales (cada una con `cd raspbian && source venv/bin/activate`):
+
+### 4. Ejecutar (2 terminales, cada una con `cd raspbian && source venv/bin/activate`)
 ```bash
 python3 nodo_mqtt.py
-python3 puente_mqtt_dynamo.py
 python3 api_app.py
 ```
 
-### 4. App Android
-1. Copia `ca_mosquitto.crt` a `app/src/main/res/raw/`.
-2. Agrega al final de `local.properties` (no se sube a GitHub):
+### 5. App Android
+1. Copia `~/ca_api.crt` de la Raspberry (FileZilla) a **`app/src/main/res/raw/ca_api.crt`**.
+2. Agrega al final de `local.properties`:
 ```properties
 api.url=https://172.20.10.2:5000/
-mqtt.uri=ssl://172.20.10.2:8883
-mqtt.user=app_android
-mqtt.pass=clave_de_app_android
-hmac.key=la_misma_clave_HMAC_del_.env
 device.id=raspbian01
 ```
-3. *Sync Gradle* y ejecutar. El celular/emulador debe estar en la misma red que la VM.
+3. *Sync Gradle* y ejecutar. El celular/emulador debe estar en la misma red que la Raspberry.
 
-**Si la IP de la VM cambia:** ejecuta otra vez `sudo ./instalar_broker.sh <IP_NUEVA>` (la CA no cambia, no hay que copiar el certificado de nuevo), actualiza `local.properties` y `app/src/main/res/xml/network_security_config.xml`.
+**Si la IP de la Raspberry cambia:** `./crear_certs_api.sh <IP_NUEVA>` y actualiza `api.url`. La CA no cambia, así que no hay que copiar el certificado de nuevo.
 
 ## Pruebas para el video demostrativo
-1. Login → el panel muestra **MQTT: Conectado (TLS)** y lecturas cada 5 s.
-2. Activar LED / ventilador → la terminal del nodo muestra `[ACTUADOR] ...` (con el ventilador encendido la temperatura baja).
-3. Movimiento detectado → aparece en rojo en la app.
-4. **DynamoDB:** en la consola de AWS → DynamoDB → Tablas → `iot_lecturas` → *Explorar elementos*: aparecen las lecturas.
-5. **Reconexión del nodo:** quita la red de la VM 1 min → `[OFFLINE] lectura guardada` → vuelve la red → `[SYNC] N lecturas pendientes reenviadas`.
-6. **App sin internet:** modo avión → se siguen viendo los datos guardados; activa un switch → "se enviará al reconectar" → quita modo avión → el comando llega.
-7. **Contingencia:** detén `nodo_mqtt.py` → la app muestra **DESCONECTADO** (Last Will).
+1. `ping` y `ssh` a la Raspberry.
+2. **AWS IoT → Cliente de prueba MQTT** → suscribirse a `iot/#` → se ven llegar las lecturas en JSON.
+3. **DynamoDB → Tablas → `iot_lecturas` → Explorar elementos**: aparecen los mensajes guardados.
+4. App: login → lecturas cada 3 s → activar LED / ventilador → la terminal del nodo muestra `[ACTUADOR] ...`.
+5. **Almacenamiento temporal:** quita la red de la Raspberry 1 min → `[OFFLINE] lectura guardada` → vuelve la red → `[SYNC] N lecturas pendientes reenviadas` → aparecen en DynamoDB.
+6. **Contingencia:** detén `nodo_mqtt.py` con el cable/red desconectado → la app muestra **SIN SEÑAL**.
+7. **App sin red:** modo avión → se siguen viendo los datos guardados; activa un switch → "se enviará al reconectar" → quita modo avión → el comando llega.
 8. **Seguridad:**
-   - Sin usuario: `mosquitto_sub -h localhost -p 8883 --cafile /etc/mosquitto/certs/ca.crt -t 'iot/#'` → *not authorised*.
-   - Sin TLS: `mosquitto_sub -h localhost -p 1883 -t '#'` → *connection refused*.
-   - Comando falso: `mosquitto_pub -h localhost -p 8883 --cafile /etc/mosquitto/certs/ca.crt -u app_android -P <clave> -t iot/raspbian01/comandos -m '{"data":"{}","firma":"x"}'` → el nodo muestra `[SEGURIDAD] ... descartado`.
+   - Publica desde el cliente de prueba MQTT en `iot/raspbian01/comandos` un mensaje falso → el nodo muestra `[SEGURIDAD] ... descartado`.
+   - Edita una temperatura en DynamoDB → la app muestra **⚠ firma inválida** y la API lo registra.
    - 5 logins fallidos → la API bloquea 60 s.
 9. Ejecuta la app en 2 emuladores con distinta versión de Android.
