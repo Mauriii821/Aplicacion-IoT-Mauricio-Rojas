@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SoloTablasDelProyectoIoT",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:CreateTable",
+        "dynamodb:DescribeTable",
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:Query"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:*:table/iot_lecturas",
+        "arn:aws:dynamodb:us-east-1:*:table/iot_estado",
+        "arn:aws:dynamodb:us-east-1:*:table/iot_usuarios"
+      ]
+    }
+  ]
+}

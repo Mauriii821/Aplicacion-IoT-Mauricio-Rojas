@@ -1,3 +1,0 @@
-Copia aquí el archivo ca_mosquitto.crt que genera raspbian/broker/instalar_broker.sh
-(queda en /home/<usuario>/ca_mosquitto.crt dentro de la VM Raspbian).
-Es el certificado PÚBLICO de la CA: no es secreto, se puede subir a GitHub.

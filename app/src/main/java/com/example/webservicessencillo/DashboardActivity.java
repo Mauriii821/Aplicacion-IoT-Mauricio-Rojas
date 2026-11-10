@@ -18,10 +18,13 @@ import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.webservicessencillo.datos.CacheLocal;
 import com.example.webservicessencillo.datos.Conexion;
+import com.example.webservicessencillo.datos.Sesion;
 import com.example.webservicessencillo.mqtt.MqttManager;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import java.util.Map;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -31,8 +34,8 @@ import java.util.Locale;
  * Pantalla principal: monitorea los sensores y controla los actuadores.
  *
  * Canal principal: MQTT sobre TLS (tiempo real).
- * Plan de contingencia: si MQTT no está disponible, se consulta la base de datos
- * por HTTP (datos.php) cada 15 s, y siempre se muestra lo último guardado en el teléfono.
+ * Plan de contingencia: si MQTT no está disponible, se consultan los datos guardados
+ * en DynamoDB a través de la API HTTPS de la VM cada 15 s, y siempre se muestra lo último guardado en el teléfono.
  */
 public class DashboardActivity extends AppCompatActivity implements MqttManager.Listener {
 
@@ -59,6 +62,11 @@ public class DashboardActivity extends AppCompatActivity implements MqttManager.
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Sin sesión iniciada no se puede ver el panel (control de acceso)
+        if (!Sesion.activa()) {
+            finish();
+            return;
+        }
         setContentView(R.layout.activity_dashboard);
 
         tvConexion = findViewById(R.id.tvConexion);
@@ -78,7 +86,10 @@ public class DashboardActivity extends AppCompatActivity implements MqttManager.
 
         swLed.setOnCheckedChangeListener(this::onSwitch);
         swVentilador.setOnCheckedChangeListener(this::onSwitch);
-        btnSalir.setOnClickListener(v -> finish());
+        btnSalir.setOnClickListener(v -> {
+            Sesion.cerrar();
+            finish();
+        });
 
         // Mostrar de inmediato lo guardado en el teléfono (funciona sin internet)
         mostrarDesdeCache();
@@ -88,7 +99,7 @@ public class DashboardActivity extends AppCompatActivity implements MqttManager.
     protected void onStart() {
         super.onStart();
         mqtt.conectar();
-        cargarDesdeServidor();               // trae el historial de la BD
+        cargarDesdeServidor();               // trae el historial guardado en DynamoDB
         handler.postDelayed(respaldoHttp, RESPALDO_HTTP_MS);
     }
 
@@ -129,9 +140,9 @@ public class DashboardActivity extends AppCompatActivity implements MqttManager.
         mostrarEstado(estado);
     }
 
-    // ---------------- Respaldo HTTP (base de datos) ----------------
+    // ---------------- Respaldo HTTPS (DynamoDB vía API) ----------------
     private void cargarDesdeServidor() {
-        String url = Conexion.URL_WEB_SERVICES + "datos.php?dispositivo=" + BuildConfig.DEVICE_ID;
+        String url = Conexion.URL_WEB_SERVICES + "datos?dispositivo=" + BuildConfig.DEVICE_ID;
         JsonObjectRequest req = new JsonObjectRequest(Request.Method.GET, url, null,
                 response -> {
                     JSONArray historial = response.optJSONArray("historial");
@@ -147,11 +158,23 @@ public class DashboardActivity extends AppCompatActivity implements MqttManager.
                     }
                 },
                 error -> {
+                    if (error.networkResponse != null && error.networkResponse.statusCode == 401) {
+                        // La sesión venció: volver al login
+                        Sesion.cerrar();
+                        Toast.makeText(this, "Sesión vencida, inicie sesión otra vez", Toast.LENGTH_LONG).show();
+                        finish();
+                        return;
+                    }
                     if (!mqtt.estaConectado()) {
                         tvConexion.setText("○ Sin conexión: mostrando datos guardados en el teléfono");
                         tvConexion.setBackgroundColor(Color.parseColor("#EF6C00"));
                     }
-                });
+                }) {
+            @Override
+            public Map<String, String> getHeaders() {
+                return Sesion.cabeceras();   // token de sesión
+            }
+        };
         requestQueue.add(req);
     }
 

@@ -16,6 +16,7 @@ import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.webservicessencillo.datos.Conexion;
+import com.example.webservicessencillo.datos.Sesion;
 
 import org.json.JSONObject;
 
@@ -62,13 +63,15 @@ public class MainActivity extends AppCompatActivity {
         }
 
         btnLogin.setEnabled(false);
-        String url = Conexion.URL_WEB_SERVICES + "login.php";
+        String url = Conexion.URL_WEB_SERVICES + "login";
 
         // POST: las credenciales viajan en el cuerpo, no en la URL
         StringRequest peticion = new StringRequest(Request.Method.POST, url,
                 response -> {
                     btnLogin.setEnabled(true);
-                    if (esExito(response)) {
+                    String token = tokenSiExito(response);
+                    if (token != null) {
+                        Sesion.iniciar(token);
                         intentosFallidos = 0;
                         editTextPass.setText("");
                         startActivity(new Intent(getApplicationContext(), DashboardActivity.class));
@@ -83,7 +86,23 @@ public class MainActivity extends AppCompatActivity {
                 },
                 error -> {
                     btnLogin.setEnabled(true);
-                    Toast.makeText(getApplicationContext(), "Error de comunicación con el servidor", Toast.LENGTH_SHORT).show();
+                    int codigo = error.networkResponse != null ? error.networkResponse.statusCode : 0;
+                    String mensaje;
+                    if (codigo == 401) {
+                        intentosFallidos++;
+                        if (intentosFallidos >= MAX_INTENTOS) {
+                            bloqueadoHasta = SystemClock.elapsedRealtime() + BLOQUEO_MS;
+                            intentosFallidos = 0;
+                        }
+                        mensaje = "Credenciales incorrectas";
+                    } else if (codigo == 429) {
+                        mensaje = "Demasiados intentos. Espere un minuto";
+                    } else if (codigo == 503) {
+                        mensaje = "La base de datos no está disponible";
+                    } else {
+                        mensaje = "Error de comunicación con el servidor";
+                    }
+                    Toast.makeText(getApplicationContext(), mensaje, Toast.LENGTH_SHORT).show();
                 }) {
             @Override
             protected Map<String, String> getParams() {
@@ -93,17 +112,19 @@ public class MainActivity extends AppCompatActivity {
                 return p;
             }
         };
-        peticion.setRetryPolicy(new DefaultRetryPolicy(8000, 1, 1f));
+        peticion.setRetryPolicy(new DefaultRetryPolicy(8000, 0, 1f));
         servicio.add(peticion);
     }
 
-    private static boolean esExito(String response) {
-        String r = response.trim();
-        if (r.equals("Exito")) return true;  // formato antiguo
+    /** Devuelve el token de sesión si el login fue exitoso; si no, null. */
+    private static String tokenSiExito(String response) {
         try {
-            return "Exito".equals(new JSONObject(r).optString("status"));
-        } catch (Exception e) {
-            return false;
-        }
+            JSONObject json = new JSONObject(response.trim());
+            if ("Exito".equals(json.optString("status"))) {
+                String token = json.optString("token", "");
+                return token.isEmpty() ? null : token;
+            }
+        } catch (Exception ignored) { }
+        return null;
     }
 }

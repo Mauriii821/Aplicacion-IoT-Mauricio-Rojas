@@ -6,6 +6,7 @@ import android.os.Looper;
 import android.util.Log;
 
 import com.example.webservicessencillo.BuildConfig;
+import com.example.webservicessencillo.R;
 import com.example.webservicessencillo.datos.CacheLocal;
 import com.example.webservicessencillo.seguridad.Firma;
 
@@ -121,11 +122,11 @@ public class MqttManager {
      * El broker Mosquitto de la VM usa un certificado firmado por nuestra propia CA
      * (creada con raspbian/broker/instalar_broker.sh). La app solo confía en esa CA,
      * así que no se puede conectar a un broker falso que intercepte el tráfico.
-     * El archivo va en app/src/main/assets/ca_mosquitto.crt
+     * El archivo va en app/src/main/res/raw/ca_mosquitto.crt
      */
     private SSLSocketFactory socketFactoryTls() {
         if (socketFactory != null) return socketFactory;
-        try (InputStream in = contexto.getAssets().open("ca_mosquitto.crt")) {
+        try (InputStream in = contexto.getResources().openRawResource(R.raw.ca_mosquitto)) {
             Certificate ca = CertificateFactory.getInstance("X.509").generateCertificate(in);
             KeyStore almacen = KeyStore.getInstance(KeyStore.getDefaultType());
             almacen.load(null, null);
@@ -136,8 +137,8 @@ public class MqttManager {
             ssl.init(null, tmf.getTrustManagers(), null);
             socketFactory = ssl.getSocketFactory();
         } catch (Exception e) {
-            // Sin el archivo se usan las CA del sistema (sirve para un broker con certificado público)
-            Log.w(TAG, "No se encontró assets/ca_mosquitto.crt, usando CA del sistema", e);
+            // Si el certificado es inválido se usan las CA del sistema
+            Log.w(TAG, "No se pudo cargar res/raw/ca_mosquitto.crt, usando CA del sistema", e);
             socketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
         }
         return socketFactory;

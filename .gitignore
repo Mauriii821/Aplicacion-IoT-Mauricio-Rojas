@@ -1,7 +1,6 @@
 # Credenciales: NUNCA subir a GitHub
 local.properties
 raspbian/.env
-php/config.php
 *.pem
 # Archivos generados
 raspbian/buffer_*.db
@@ -12,3 +11,5 @@ app/build/
 .idea/caches/
 .idea/workspace.xml
 *.apk
+raspbian/certs_api/
+raspbian/buffer_*.db

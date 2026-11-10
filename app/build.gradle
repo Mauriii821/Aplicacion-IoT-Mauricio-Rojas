@@ -16,7 +16,7 @@ android {
         versionName "2.0-unidad3"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField "String", "URL_WEB_SERVICES", secreto('api.url', 'http://172.20.10.2/iot_app/')
+        buildConfigField "String", "URL_WEB_SERVICES", secreto('api.url', 'https://172.20.10.2:5000/')
         buildConfigField "String", "MQTT_URI", secreto('mqtt.uri', 'ssl://172.20.10.2:8883')
         buildConfigField "String", "MQTT_USER", secreto('mqtt.user', '')
         buildConfigField "String", "MQTT_PASS", secreto('mqtt.pass', '')

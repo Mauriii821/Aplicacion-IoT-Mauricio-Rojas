@@ -66,8 +66,11 @@ systemctl --no-pager --lines=5 status mosquitto || true
 DESTINO="/home/${SUDO_USER:-pi}/ca_mosquitto.crt"
 cp "$CERTS/ca.crt" "$DESTINO" && chown "${SUDO_USER:-pi}" "$DESTINO" || true
 
+# Mismo certificado para la API HTTPS de la app
+"$DIR/preparar_certs_api.sh" || true
+
 echo
 echo "Broker listo en ssl://$IP:8883"
-echo "Copia $DESTINO a la app: app/src/main/assets/ca_mosquitto.crt"
+echo "Copia $DESTINO a la app: app/src/main/res/raw/ca_mosquitto.crt"
 echo "Prueba rápida (en otra terminal):"
 echo "  mosquitto_sub -h localhost -p 8883 --cafile $CERTS/ca.crt -u puente -P <clave> -t 'iot/#' -v"
