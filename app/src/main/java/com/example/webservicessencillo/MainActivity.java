@@ -100,9 +100,9 @@ public class MainActivity extends AppCompatActivity {
                     } else if (codigo == 503) {
                         mensaje = "La base de datos no está disponible";
                     } else {
-                        mensaje = "Error de comunicación con el servidor";
+                        mensaje = "Error de comunicación con el servidor: " + detalleError(error);
                     }
-                    Toast.makeText(getApplicationContext(), mensaje, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getApplicationContext(), mensaje, Toast.LENGTH_LONG).show();
                 }) {
             @Override
             protected Map<String, String> getParams() {
@@ -114,6 +114,16 @@ public class MainActivity extends AppCompatActivity {
         };
         peticion.setRetryPolicy(new DefaultRetryPolicy(8000, 0, 1f));
         servicio.add(peticion);
+    }
+
+    /** Motivo técnico del error (sin datos sensibles), para diagnosticar la conexión. */
+    private static String detalleError(Throwable error) {
+        Throwable causa = error.getCause() != null ? error.getCause() : error;
+        String tipo = causa.getClass().getSimpleName();
+        String msg = causa.getMessage();
+        if (msg != null && msg.length() > 120) msg = msg.substring(0, 120);
+        android.util.Log.w("Login", "Fallo de conexión con " + Conexion.URL_WEB_SERVICES, error);
+        return tipo + (msg != null ? " (" + msg + ")" : "") + " · URL: " + Conexion.URL_WEB_SERVICES;
     }
 
     /** Devuelve el token de sesión si el login fue exitoso; si no, null. */
